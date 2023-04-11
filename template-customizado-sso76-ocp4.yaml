@@ -1,0 +1,243 @@
+apiVersion: v1
+items:
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    annotations:
+      description: ConfigMap providing service ca bundle.
+      service.beta.openshift.io/inject-cabundle: "true"
+    labels:
+      application: sso
+      rhsso: 7.6.1.GA
+      template: template-customizado-sso76-ocp4
+    name: sso-service-ca
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    annotations:
+      description: ConfigMap providing sso-extensions.cli content.
+    labels:
+      application: sso
+      rhsso: 7.6.1.GA
+      template: template-customizado-sso76-ocp4
+    name: sso-extensions-configmap
+  data:
+    extension: |-
+      batch
+
+      module add --name=${env.DB_EAP_MODULE} --resources=${env.DB_DRIVER_FILE} --dependencies=javax.api,javax.resource.api
+      /subsystem=datasources/jdbc-driver=${env.DB_DRIVER_NAME}:add( \
+        driver-name=${env.DB_DRIVER_NAME}, \
+        driver-module-name=${env.DB_EAP_MODULE}, \
+        driver-class-name=${env.DB_DRIVER}, \
+        driver-xa-datasource-class-name=${env.DB_XA_DRIVER} \
+      )
+      /subsystem=datasources/data-source=KeycloakDS:remove()
+      /subsystem=datasources/data-source=KeycloakDS:add( \
+        jndi-name=java:jboss/datasources/KeycloakDS, \
+        enabled=true, \
+        use-java-context=true, \
+        connection-url=${env.DB_JDBC_URL}, \
+        driver-name=${env.DB_DRIVER_NAME}, \
+        user-name=${env.DB_USERNAME}, \
+        password=${env.DB_PASSWORD} \
+      )
+
+      run-batch
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      description: The web server's https port.
+      service.alpha.openshift.io/serving-cert-secret-name: sso-https-secret
+    labels:
+      application: sso
+      rhsso: 7.6.1.GA
+      template: template-customizado-sso76-ocp4
+    name: sso
+  spec:
+    ports:
+    - port: 8443
+      targetPort: 8443
+    selector:
+      deploymentConfig: sso
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      description: The JGroups ping port for clustering.
+      service.alpha.openshift.io/serving-cert-secret-name: sso-jgroups-secret
+    labels:
+      application: sso
+      rhsso: 7.6.1.GA
+      template: template-customizado-sso76-ocp4
+    name: sso-ping
+  spec:
+    clusterIP: None
+    ports:
+    - name: ping
+      port: 8888
+    publishNotReadyAddresses: true
+    selector:
+      deploymentConfig: sso
+- apiVersion: route.openshift.io/v1
+  id: sso-https
+  kind: Route
+  metadata:
+    annotations:
+      description: Route for application's https service.
+    labels:
+      application: sso
+      rhsso: 7.6.1.GA
+      template: template-customizado-sso76-ocp4
+    name: sso
+  spec:
+    tls:
+      termination: reencrypt
+    to:
+      name: sso
+- apiVersion: apps.openshift.io/v1
+  kind: DeploymentConfig
+  metadata:
+    labels:
+      application: sso
+      rhsso: 7.6.1.GA
+      template: template-customizado-sso76-ocp4
+    name: sso
+  spec:
+    replicas: 1
+    selector:
+      deploymentConfig: sso
+    strategy:
+      type: Recreate
+    template:
+      metadata:
+        labels:
+          application: sso
+          deploymentConfig: sso
+        name: sso
+      spec:
+        containers:
+        - env:
+          - name: SSO_HOSTNAME
+            value: ""
+          - name: DB_MIN_POOL_SIZE
+            value: ""
+          - name: DB_MAX_POOL_SIZE
+            value: ""
+          - name: DB_TX_ISOLATION
+            value: ""
+          - name: JGROUPS_PING_PROTOCOL
+            value: openshift.DNS_PING
+          - name: OPENSHIFT_DNS_PING_SERVICE_NAME
+            value: sso-ping
+          - name: OPENSHIFT_DNS_PING_SERVICE_PORT
+            value: "8888"
+          - name: X509_CA_BUNDLE
+            value: /var/run/configmaps/service-ca/service-ca.crt /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          - name: JGROUPS_CLUSTER_PASSWORD
+            value: iTilwCi5LyBp80QvDJQ8kxyfyJks4ujT
+          - name: SSO_ADMIN_USERNAME
+            value: admin
+          - name: SSO_ADMIN_PASSWORD
+            value: admin
+          - name: SSO_REALM
+            value: ""
+          - name: SSO_SERVICE_USERNAME
+            value: ""
+          - name: SSO_SERVICE_PASSWORD
+            value: ""
+          - name: DB_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: sso-database-secret
+                key: db-username
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: sso-database-secret
+                key: db-password
+          - name: DB_JDBC_URL
+            valueFrom:
+              secretKeyRef:
+                name: sso-database-secret
+                key: db-jdbc-url
+          - name: DB_DRIVER_NAME
+            valueFrom:
+              secretKeyRef:
+                name: sso-database-secret
+                key: db-driver-name
+          - name: DB_DRIVER
+            valueFrom:
+              secretKeyRef:
+                name: sso-database-secret
+                key: db-driver
+          - name: DB_XA_DRIVER
+            valueFrom:
+              secretKeyRef:
+                name: sso-database-secret
+                key: db-xa-driver
+          - name: DB_EAP_MODULE
+            valueFrom:
+              secretKeyRef:
+                name: sso-database-secret
+                key: db-eap-module
+          - name: DB_DRIVER_FILE
+            valueFrom:
+              secretKeyRef:
+                name: sso-database-secret
+                key: db-driver-file
+          image: 'image-registry.openshift-image-registry.svc:5000/openshift/sso76-custom-oracle:1.1'
+          imagePullPolicy: Always
+          name: sso
+          ports:
+          - containerPort: 8778
+            name: jolokia
+            protocol: TCP
+          - containerPort: 8080
+            name: http
+            protocol: TCP
+          - containerPort: 8443
+            name: https
+            protocol: TCP
+          - containerPort: 8888
+            name: ping
+            protocol: TCP
+          resources:
+            limits:
+              memory: 1Gi
+          volumeMounts:
+          - mountPath: /etc/x509/https
+            name: sso-https-volume
+            readOnly: true
+          - mountPath: /etc/x509/jgroups
+            name: sso-jgroups-volume
+            readOnly: true
+          - mountPath: /var/run/configmaps/service-ca
+            name: service-ca
+            readOnly: true
+          - mountPath: /opt/eap/extensions/sso-extensions.cli
+            name: sso-extensions-volume
+            subPath: sso-extensions.cli
+        terminationGracePeriodSeconds: 75
+        volumes:
+        - name: sso-https-volume
+          secret:
+            secretName: sso-https-secret
+        - name: sso-jgroups-volume
+          secret:
+            secretName: sso-jgroups-secret
+        - configMap:
+            name: sso-service-ca
+          name: service-ca
+        - configMap:
+            items:
+              - key: extension
+                path: sso-extensions.cli
+            name: sso-extensions-configmap
+          name: sso-extensions-volume
+
+    triggers:
+    - type: ConfigChange
+kind: List
+metadata: {}
