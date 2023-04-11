@@ -1,3 +1,5 @@
+# Template customizado do RH-SSO 7.6 com driver Oracle
+
 O objetivo deste documento é criar uma imagem customizada do Red Hat Single Sign-On 7.6 com driver Oracle para conexão com banco de dados.
 
 # Criação de imagem
@@ -59,7 +61,7 @@ O template já está criado e pode ser reutilizado, mas caso em algum momento o 
 ```
 oc process sso76-ocp4-x509-https SSO_ADMIN_USERNAME=<USERNAME> SSO_ADMIN_PASSWORD=<PASSWORD> -n openshift -o yaml > sso76-ocp4-x509-https.yaml
 ```
-Esse template precisa ser adaptado para a conexão com o Oracle. Utilizar o arquivo [template-customizado-sso76-ocp4.yaml](INSERIR LINK) como uma versão final do template.
+Esse template precisa ser adaptado para a conexão com o Oracle. Utilizar o arquivo [template-customizado-sso76-ocp4.yaml](https://github.com/marcusviniciusaso/rhsso76-custom-oracle/blob/main/template-customizado-sso76-ocp4.yaml) como uma versão final do template.
 
 **4. Habilitar rota para o registry interno do OpenShift**
 
@@ -140,7 +142,7 @@ oc new-project rhsso
 
 **2. Editar o template para colocar a imagem no campo image**
 
-Editar a linha 190 do template [template-customizado-sso76-ocp4.yaml](INSERIR LINK) para colocar o endereço, nome e tag da imagem.
+Editar a linha 190 do template [template-customizado-sso76-ocp4.yaml](https://github.com/marcusviniciusaso/rhsso76-custom-oracle/blob/main/template-customizado-sso76-ocp4.yaml) para colocar o endereço, nome e tag da imagem.
 
 **3. Criação da secret com os dados de acesso ao banco de dados**
 
